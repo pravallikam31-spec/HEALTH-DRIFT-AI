@@ -176,7 +176,6 @@ export function Hero() {
         transition={{ delay: 1.6, duration: 1 }}
         className="absolute bottom-8 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground flex flex-col items-center gap-2"
       >
-        <span>Scroll</span>
         <span className="h-10 w-px bg-gradient-to-b from-primary to-transparent" />
       </motion.div>
     </section>

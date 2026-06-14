@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WaterDashboardRouteImport } from './routes/water-dashboard'
 import { Route as StepsDashboardRouteImport } from './routes/steps-dashboard'
+import { Route as SleepDashboardRouteImport } from './routes/sleep-dashboard'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as MedicationDashboardRouteImport } from './routes/medication-dashboard'
 import { Route as FoodDashboardRouteImport } from './routes/food-dashboard'
 import { Route as EditProfileRouteImport } from './routes/edit-profile'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -27,9 +29,19 @@ const StepsDashboardRoute = StepsDashboardRouteImport.update({
   path: '/steps-dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SleepDashboardRoute = SleepDashboardRouteImport.update({
+  id: '/sleep-dashboard',
+  path: '/sleep-dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MedicationDashboardRoute = MedicationDashboardRouteImport.update({
+  id: '/medication-dashboard',
+  path: '/medication-dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FoodDashboardRoute = FoodDashboardRouteImport.update({
@@ -58,7 +70,9 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/edit-profile': typeof EditProfileRoute
   '/food-dashboard': typeof FoodDashboardRoute
+  '/medication-dashboard': typeof MedicationDashboardRoute
   '/profile': typeof ProfileRoute
+  '/sleep-dashboard': typeof SleepDashboardRoute
   '/steps-dashboard': typeof StepsDashboardRoute
   '/water-dashboard': typeof WaterDashboardRoute
 }
@@ -67,7 +81,9 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/edit-profile': typeof EditProfileRoute
   '/food-dashboard': typeof FoodDashboardRoute
+  '/medication-dashboard': typeof MedicationDashboardRoute
   '/profile': typeof ProfileRoute
+  '/sleep-dashboard': typeof SleepDashboardRoute
   '/steps-dashboard': typeof StepsDashboardRoute
   '/water-dashboard': typeof WaterDashboardRoute
 }
@@ -77,7 +93,9 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/edit-profile': typeof EditProfileRoute
   '/food-dashboard': typeof FoodDashboardRoute
+  '/medication-dashboard': typeof MedicationDashboardRoute
   '/profile': typeof ProfileRoute
+  '/sleep-dashboard': typeof SleepDashboardRoute
   '/steps-dashboard': typeof StepsDashboardRoute
   '/water-dashboard': typeof WaterDashboardRoute
 }
@@ -88,7 +106,9 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/edit-profile'
     | '/food-dashboard'
+    | '/medication-dashboard'
     | '/profile'
+    | '/sleep-dashboard'
     | '/steps-dashboard'
     | '/water-dashboard'
   fileRoutesByTo: FileRoutesByTo
@@ -97,7 +117,9 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/edit-profile'
     | '/food-dashboard'
+    | '/medication-dashboard'
     | '/profile'
+    | '/sleep-dashboard'
     | '/steps-dashboard'
     | '/water-dashboard'
   id:
@@ -106,7 +128,9 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/edit-profile'
     | '/food-dashboard'
+    | '/medication-dashboard'
     | '/profile'
+    | '/sleep-dashboard'
     | '/steps-dashboard'
     | '/water-dashboard'
   fileRoutesById: FileRoutesById
@@ -116,7 +140,9 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   EditProfileRoute: typeof EditProfileRoute
   FoodDashboardRoute: typeof FoodDashboardRoute
+  MedicationDashboardRoute: typeof MedicationDashboardRoute
   ProfileRoute: typeof ProfileRoute
+  SleepDashboardRoute: typeof SleepDashboardRoute
   StepsDashboardRoute: typeof StepsDashboardRoute
   WaterDashboardRoute: typeof WaterDashboardRoute
 }
@@ -137,11 +163,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StepsDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sleep-dashboard': {
+      id: '/sleep-dashboard'
+      path: '/sleep-dashboard'
+      fullPath: '/sleep-dashboard'
+      preLoaderRoute: typeof SleepDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/medication-dashboard': {
+      id: '/medication-dashboard'
+      path: '/medication-dashboard'
+      fullPath: '/medication-dashboard'
+      preLoaderRoute: typeof MedicationDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/food-dashboard': {
@@ -180,7 +220,9 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   EditProfileRoute: EditProfileRoute,
   FoodDashboardRoute: FoodDashboardRoute,
+  MedicationDashboardRoute: MedicationDashboardRoute,
   ProfileRoute: ProfileRoute,
+  SleepDashboardRoute: SleepDashboardRoute,
   StepsDashboardRoute: StepsDashboardRoute,
   WaterDashboardRoute: WaterDashboardRoute,
 }

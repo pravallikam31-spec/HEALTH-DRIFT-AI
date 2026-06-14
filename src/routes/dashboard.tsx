@@ -7,10 +7,10 @@ import { AuroraBackground } from "@/components/fx/AuroraBackground";
 import { GlowButton } from "@/components/ui/GlowButton";
 import { useNavigate } from "@tanstack/react-router";
 import { db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection } from "firebase/firestore";
 import { ProfileData } from "@/components/profile/ProfileForm";
 import { format } from "date-fns";
-import { AlertCircle, HeartPulse, Activity, Droplets, Footprints, Utensils, Pill, BrainCircuit, LineChart, Sparkles, Bot, Clock } from "lucide-react";
+import { AlertCircle, HeartPulse, Activity, Droplets, Footprints, Utensils, Pill, BrainCircuit, LineChart, Sparkles, Bot, Clock, Moon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
@@ -101,6 +109,14 @@ function DashboardContent() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = React.useState<ProfileData | null>(null);
+  const [isEmergencyDialogOpen, setIsEmergencyDialogOpen] = React.useState(false);
+  const [isEmergencyActive, setIsEmergencyActive] = React.useState(false);
+  const [emergencyTime, setEmergencyTime] = React.useState("");
+  const alarmRef = React.useRef<{
+    context: AudioContext;
+    oscillator: OscillatorNode;
+    gain: GainNode;
+  } | null>(null);
 
   React.useEffect(() => {
     async function loadProfile() {
@@ -117,6 +133,77 @@ function DashboardContent() {
     }
     loadProfile();
   }, [user]);
+
+  const cleanPhoneNumber = (value: string) => value.replace(/[\s\-()]/g, "");
+
+  const startAlarm = async () => {
+    if (alarmRef.current) return;
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = "sawtooth";
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.35;
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+
+    alarmRef.current = { context, oscillator, gain };
+    setIsEmergencyActive(true);
+  };
+
+  const stopAlarm = () => {
+    if (!alarmRef.current) return;
+    try {
+      alarmRef.current.oscillator.stop();
+      alarmRef.current.context.close();
+    } catch {
+      // ignore cleanup errors
+    }
+    alarmRef.current = null;
+    setIsEmergencyActive(false);
+  };
+
+  const handleSendSOS = async () => {
+    if (!profile) {
+      window.alert("Please complete Emergency Information in your profile first.");
+      return;
+    }
+
+    const contactName = profile.emergencyContactName?.trim();
+    const contactNumberRaw = profile.emergencyContactNumber?.trim();
+    const relationship = profile.emergencyContactRelationship?.trim();
+
+    if (!contactNumberRaw || !contactName || !relationship) {
+      window.alert("Please complete Emergency Information in your profile first.");
+      return;
+    }
+
+    const contactNumber = cleanPhoneNumber(contactNumberRaw);
+    const timestamp = new Date();
+    const sosRef = doc(collection(db, "sos_logs"));
+
+    try {
+      await setDoc(sosRef, {
+        userId: user?.uid,
+        timestamp,
+        contactName,
+        contactNumber,
+        relationship,
+        status: "Emergency Activated",
+      });
+
+      setEmergencyTime(format(timestamp, "PPpp"));
+      await startAlarm();
+      setIsEmergencyDialogOpen(true);
+    } catch (err) {
+      console.error("Error sending SOS:", err);
+      window.alert("Unable to send SOS. Please try again.");
+    }
+  };
 
   const greetingName = profile?.fullName?.split(" ")[0] || "User";
   const greeting = getGreeting(greetingName);
@@ -165,7 +252,7 @@ function DashboardContent() {
             <div><div className="text-sm uppercase tracking-wider text-muted-foreground mb-2">Full Name</div><div className="font-medium text-xl">{profile.fullName}</div></div>
             <div><div className="text-sm uppercase tracking-wider text-muted-foreground mb-2">Age</div><div className="font-medium text-xl">{calculateAge(profile.dob)}</div></div>
             <div><div className="text-sm uppercase tracking-wider text-muted-foreground mb-2">Gender</div><div className="font-medium text-xl">{profile.gender}</div></div>
-            <div><div className="text-sm uppercase tracking-wider text-muted-foreground mb-2">Blood Group</div><div className="font-medium text-xl">N/A</div></div>
+            <div><div className="text-sm uppercase tracking-wider text-muted-foreground mb-2">Blood Group</div><div className="font-medium text-xl">{profile.bloodGroup || "N/A"}</div></div>
             <div><div className="text-sm uppercase tracking-wider text-muted-foreground mb-2">Height</div><div className="font-medium text-xl">{profile.height} cm</div></div>
             <div><div className="text-sm uppercase tracking-wider text-muted-foreground mb-2">Weight</div><div className="font-medium text-xl">{profile.weight} kg</div></div>
             <div className="col-span-2"><div className="text-sm uppercase tracking-wider text-muted-foreground mb-2">Health Conditions</div><div className="font-medium text-xl">{profile.medicalConditions?.length > 0 ? profile.medicalConditions.join(", ") : "None specified"}</div></div>
@@ -176,7 +263,7 @@ function DashboardContent() {
         <div className="flex flex-wrap gap-4">
           {profile.medicalConditions?.includes("Diabetes") && <span className="glass-strong px-5 py-3 rounded-full text-base font-medium border border-blue-500/30 text-blue-100 flex items-center gap-2 shadow-sm"><Activity className="w-5 h-5 text-blue-400"/> Diabetes Monitoring Active</span>}
           {profile.medicalConditions?.includes("Hypertension") && <span className="glass-strong px-5 py-3 rounded-full text-base font-medium border border-rose-500/30 text-rose-100 flex items-center gap-2 shadow-sm"><HeartPulse className="w-5 h-5 text-rose-400"/> Blood Pressure Monitoring Active</span>}
-          {profile.currentMedications && profile.currentMedications.trim().length > 0 && <span className="glass-strong px-5 py-3 rounded-full text-base font-medium border border-purple-500/30 text-purple-100 flex items-center gap-2 shadow-sm"><Pill className="w-5 h-5 text-purple-400"/> Medication Reminders Active</span>}
+          {(Array.isArray(profile.currentMedications) ? profile.currentMedications.length > 0 : profile.currentMedications?.trim?.().length > 0) && <span className="glass-strong px-5 py-3 rounded-full text-base font-medium border border-purple-500/30 text-purple-100 flex items-center gap-2 shadow-sm"><Pill className="w-5 h-5 text-purple-400"/> Medication Reminders Active</span>}
           {profile.dailyWaterGoal && <span className="glass-strong px-5 py-3 rounded-full text-base font-medium border border-cyan-500/30 text-cyan-100 flex items-center gap-2 shadow-sm"><Droplets className="w-5 h-5 text-cyan-400"/> Hydration Goal Set</span>}
         </div>
 
@@ -207,7 +294,8 @@ function DashboardContent() {
             { title: "Steps Tracking", icon: <Footprints className="w-10 h-10 text-emerald-400 mb-6" />, subtitle: "Track daily movement and walking goals.", onClick: () => navigate({ to: '/steps-dashboard' }) },
             { title: "Food Intake", icon: <Utensils className="w-10 h-10 text-orange-400 mb-6" />, subtitle: "Scan meals and track nutrition.", onClick: () => navigate({ to: '/food-dashboard' }) },
             { title: "Water Intake", icon: <Droplets className="w-10 h-10 text-cyan-400 mb-6" />, subtitle: "Monitor hydration and water goals.", onClick: () => navigate({ to: '/water-dashboard' }) },
-            { title: "Medication Reminders", icon: <Pill className="w-10 h-10 text-purple-400 mb-6" />, subtitle: "Receive medicine reminders on time.", onClick: null },
+            { title: "Sleep Tracker", icon: <Moon className="w-10 h-10 text-indigo-400 mb-6" />, subtitle: "Track sleep duration, sleep quality, and healthy sleep habits.", onClick: () => navigate({ to: '/sleep-dashboard' }) },
+            { title: "Medication Reminders", icon: <Pill className="w-10 h-10 text-purple-400 mb-6" />, subtitle: "Receive medicine reminders on time.", onClick: () => navigate({ to: '/medication-dashboard' }) },
             { title: "Activities", icon: <BrainCircuit className="w-10 h-10 text-blue-400 mb-6" />, subtitle: "Brain exercises and wellness activities.", onClick: null },
             { title: "AI Assistant", icon: <Bot className="w-10 h-10 text-rose-400 mb-6" />, subtitle: "Ask health-related questions and get guidance.", onClick: null },
           ].map((feature, idx) => (
@@ -215,9 +303,6 @@ function DashboardContent() {
               {feature.icon}
               <h3 className="text-2xl font-medium mb-3">{feature.title}</h3>
               <p className="text-base text-muted-foreground flex-grow mb-8 leading-relaxed">{feature.subtitle}</p>
-              <div className="inline-flex items-center gap-2 self-start bg-black/40 px-4 py-2 rounded-full text-sm font-medium uppercase tracking-wider text-white/60">
-                <div className="w-2 h-2 rounded-full bg-amber-400"></div> Ready for Integration
-              </div>
             </div>
           ))}
         </div>
@@ -241,10 +326,77 @@ function DashboardContent() {
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-4 sm:gap-0 mt-6">
             <AlertDialogCancel className="bg-white/5 border-white/10 hover:bg-white/10 hover:text-white text-white text-xl py-7 px-8 rounded-xl font-medium transition-colors">Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white text-xl py-7 px-8 rounded-xl font-medium border border-red-500/50 transition-colors shadow-[0_0_15px_rgba(220,38,38,0.4)]">Send SOS</AlertDialogAction>
+            <AlertDialogAction onClick={handleSendSOS} className="bg-red-600 hover:bg-red-700 text-white text-xl py-7 px-8 rounded-xl font-medium border border-red-500/50 transition-colors shadow-[0_0_15px_rgba(220,38,38,0.4)]">Send SOS</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={isEmergencyDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          stopAlarm();
+        }
+        setIsEmergencyDialogOpen(open);
+      }}>
+        <DialogContent
+          onInteractOutside={(event) => event.preventDefault()}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          className="bg-zinc-950 border-white/10 text-foreground glass-strong sm:rounded-2xl max-w-2xl"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-red-400 text-3xl font-display text-center">🚨 EMERGENCY ALERT ACTIVATED 🚨</DialogTitle>
+            <DialogDescription className="text-lg text-white/80 pt-4 pb-6 text-center leading-relaxed">
+              Emergency assistance may be required.
+              <br />
+              Emergency Contact Information has been prepared.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 text-sm text-white/80 py-4">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+              <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">User Name</div>
+              <div className="text-lg font-medium text-white">{profile.fullName || "User"}</div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Emergency Contact Name</div>
+                <div className="text-lg font-medium text-white">{profile.emergencyContactName || "N/A"}</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Emergency Contact Number</div>
+                <div className="text-lg font-medium text-white">{profile.emergencyContactNumber || "N/A"}</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5 sm:col-span-2">
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Relationship</div>
+                <div className="text-lg font-medium text-white">{profile.emergencyContactRelationship || "N/A"}</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5 sm:col-span-2">
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Current Time</div>
+                <div className="text-lg font-medium text-white">{emergencyTime || format(new Date(), "PPpp")}</div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-4 sm:gap-0 mt-6 flex flex-col sm:flex-row justify-end">
+            <button
+              type="button"
+              onClick={stopAlarm}
+              className="bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white text-white text-lg py-4 px-6 rounded-xl font-medium transition-colors"
+            >
+              🔇 Stop Alarm
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                stopAlarm();
+                setIsEmergencyDialogOpen(false);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-lg py-4 px-6 rounded-xl font-medium border border-emerald-500/50 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.35)]"
+            >
+              ✅ I'm Safe
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

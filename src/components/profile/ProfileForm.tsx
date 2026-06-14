@@ -13,11 +13,12 @@ export interface ProfileData {
   fullName: string;
   dob: string;
   gender: string;
+  bloodGroup: string;
   height: string;
   weight: string;
   medicalConditions: string[];
   otherCondition: string;
-  currentMedications: string;
+  currentMedications: string[];
   allergies: string;
   emergencyContactName: string;
   emergencyContactNumber: string;
@@ -28,6 +29,7 @@ export interface ProfileData {
 
 const MEDICAL_CONDITIONS = ["Diabetes", "Hypertension", "Heart Disease", "Arthritis", "Other"];
 const GENDER_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
+const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const RELATIONSHIP_OPTIONS = ["Son", "Daughter", "Spouse", "Parent", "Sibling", "Friend", "Caregiver", "Other"];
 const ACTIVITY_LEVELS = ["Low", "Moderate", "Active"];
 
@@ -35,17 +37,31 @@ export function ProfileForm({ initialData }: { initialData?: ProfileData | null 
   const { user } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = React.useState(false);
+  const [medInput, setMedInput] = React.useState("");
+
+  // Helper to convert old string format to array
+  const convertMedicationsToArray = (meds: any): string[] => {
+    if (Array.isArray(meds)) return meds;
+    if (typeof meds === "string" && meds.trim()) {
+      return meds.split(",").map(m => m.trim()).filter(m => m);
+    }
+    return [];
+  };
 
   const [formData, setFormData] = React.useState<ProfileData>(
-    initialData || {
+    initialData ? {
+      ...initialData,
+      currentMedications: convertMedicationsToArray(initialData.currentMedications)
+    } : {
       fullName: "",
       dob: "",
       gender: "",
+      bloodGroup: "",
       height: "",
       weight: "",
       medicalConditions: [],
       otherCondition: "",
-      currentMedications: "",
+      currentMedications: [],
       allergies: "",
       emergencyContactName: "",
       emergencyContactNumber: "",
@@ -84,6 +100,24 @@ export function ProfileForm({ initialData }: { initialData?: ProfileData | null 
         return { ...prev, medicalConditions: prev.medicalConditions.filter((c) => c !== condition) };
       }
     });
+  };
+
+  const addMedicine = () => {
+    const trimmed = medInput.trim();
+    if (!trimmed) return;
+    if (formData.currentMedications.includes(trimmed)) return;
+    setFormData((prev) => ({
+      ...prev,
+      currentMedications: [...prev.currentMedications, trimmed]
+    }));
+    setMedInput("");
+  };
+
+  const removeMedicine = (med: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      currentMedications: prev.currentMedications.filter((m) => m !== med)
+    }));
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -137,6 +171,14 @@ export function ProfileForm({ initialData }: { initialData?: ProfileData | null 
           </div>
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor="bloodGroup">Blood Group</Label>
+          <select id="bloodGroup" name="bloodGroup" className={inputClass} value={formData.bloodGroup} onChange={handleChange}>
+            <option value="">Select Blood Group</option>
+            {BLOOD_GROUP_OPTIONS.map((bg) => <option key={bg} value={bg}>{bg}</option>)}
+          </select>
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="height">Height (cm)</Label>
@@ -177,8 +219,46 @@ export function ProfileForm({ initialData }: { initialData?: ProfileData | null 
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="currentMedications">Current Medications</Label>
-          <Textarea id="currentMedications" name="currentMedications" value={formData.currentMedications} onChange={handleChange} placeholder="List any medications you are currently taking..." />
+          <Label>Current Medications</Label>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                value={medInput}
+                onChange={(e) => setMedInput(e.target.value)}
+                onKeyPress={(e) => { if (e.key === "Enter") { e.preventDefault(); addMedicine(); } }}
+                placeholder="Medicine Name"
+                className="flex-1"
+              />
+              <GlowButton
+                type="button"
+                onClick={addMedicine}
+                className="px-4 h-10 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 hover:border-blue-400/50"
+              >
+                + Add
+              </GlowButton>
+            </div>
+            {formData.currentMedications.length > 0 && (
+              <div className="space-y-2 bg-black/20 rounded-lg p-3 border border-white/10">
+                {formData.currentMedications.map((med) => (
+                  <div key={med} className="flex items-center justify-between bg-white/5 rounded px-3 py-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-lg">💊</span>
+                      <span>{med}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeMedicine(med)}
+                      className="text-red-400 hover:text-red-300 font-bold text-lg transition-colors"
+                      title="Remove medicine"
+                    >
+                      ❌
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2">

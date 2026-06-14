@@ -8,7 +8,7 @@ const predictions = [
   { name: "Cardiovascular Disease", risk: 18, window: "24 months", color: "from-rose-400 to-rose-600" },
   { name: "Type 2 Diabetes", risk: 42, window: "18 months", color: "from-amber-400 to-orange-500" },
   { name: "Hypertension", risk: 67, window: "6 months", color: "from-fuchsia-400 to-violet-500" },
-  { name: "Neurodegenerative", risk: 9, window: "5+ years", color: "from-cyan-400 to-sky-500" },
+  { name: "Chronic Stress and Burnout", risk: 9, window: "5+ years", color: "from-cyan-400 to-sky-500" },
 ];
 
 export function PredictionShowcase() {
@@ -43,15 +43,6 @@ export function PredictionShowcase() {
           >
             EF 58% · normal
             <span className="h-px w-12 bg-accent" />
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 font-mono-display text-[10px] tracking-[0.22em] text-muted-foreground"
-          >
-            REAL-TIME 4D RECONSTRUCTION
           </motion.div>
         </div>
 
