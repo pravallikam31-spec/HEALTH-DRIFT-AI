@@ -9,12 +9,24 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WaterDashboardRouteImport } from './routes/water-dashboard'
+import { Route as StepsDashboardRouteImport } from './routes/steps-dashboard'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as FoodDashboardRouteImport } from './routes/food-dashboard'
 import { Route as EditProfileRouteImport } from './routes/edit-profile'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 
+const WaterDashboardRoute = WaterDashboardRouteImport.update({
+  id: '/water-dashboard',
+  path: '/water-dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StepsDashboardRoute = StepsDashboardRouteImport.update({
+  id: '/steps-dashboard',
+  path: '/steps-dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -47,6 +59,8 @@ export interface FileRoutesByFullPath {
   '/edit-profile': typeof EditProfileRoute
   '/food-dashboard': typeof FoodDashboardRoute
   '/profile': typeof ProfileRoute
+  '/steps-dashboard': typeof StepsDashboardRoute
+  '/water-dashboard': typeof WaterDashboardRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +68,8 @@ export interface FileRoutesByTo {
   '/edit-profile': typeof EditProfileRoute
   '/food-dashboard': typeof FoodDashboardRoute
   '/profile': typeof ProfileRoute
+  '/steps-dashboard': typeof StepsDashboardRoute
+  '/water-dashboard': typeof WaterDashboardRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,6 +78,8 @@ export interface FileRoutesById {
   '/edit-profile': typeof EditProfileRoute
   '/food-dashboard': typeof FoodDashboardRoute
   '/profile': typeof ProfileRoute
+  '/steps-dashboard': typeof StepsDashboardRoute
+  '/water-dashboard': typeof WaterDashboardRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -71,8 +89,17 @@ export interface FileRouteTypes {
     | '/edit-profile'
     | '/food-dashboard'
     | '/profile'
+    | '/steps-dashboard'
+    | '/water-dashboard'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/edit-profile' | '/food-dashboard' | '/profile'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/edit-profile'
+    | '/food-dashboard'
+    | '/profile'
+    | '/steps-dashboard'
+    | '/water-dashboard'
   id:
     | '__root__'
     | '/'
@@ -80,6 +107,8 @@ export interface FileRouteTypes {
     | '/edit-profile'
     | '/food-dashboard'
     | '/profile'
+    | '/steps-dashboard'
+    | '/water-dashboard'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -88,10 +117,26 @@ export interface RootRouteChildren {
   EditProfileRoute: typeof EditProfileRoute
   FoodDashboardRoute: typeof FoodDashboardRoute
   ProfileRoute: typeof ProfileRoute
+  StepsDashboardRoute: typeof StepsDashboardRoute
+  WaterDashboardRoute: typeof WaterDashboardRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/water-dashboard': {
+      id: '/water-dashboard'
+      path: '/water-dashboard'
+      fullPath: '/water-dashboard'
+      preLoaderRoute: typeof WaterDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/steps-dashboard': {
+      id: '/steps-dashboard'
+      path: '/steps-dashboard'
+      fullPath: '/steps-dashboard'
+      preLoaderRoute: typeof StepsDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
@@ -136,6 +181,8 @@ const rootRouteChildren: RootRouteChildren = {
   EditProfileRoute: EditProfileRoute,
   FoodDashboardRoute: FoodDashboardRoute,
   ProfileRoute: ProfileRoute,
+  StepsDashboardRoute: StepsDashboardRoute,
+  WaterDashboardRoute: WaterDashboardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

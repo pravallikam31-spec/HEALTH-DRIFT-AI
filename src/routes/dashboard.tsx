@@ -204,9 +204,9 @@ function DashboardContent() {
         <h2 className="text-3xl font-display mt-16 mb-6">Main Features</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[
-            { title: "Steps Tracking", icon: <Footprints className="w-10 h-10 text-emerald-400 mb-6" />, subtitle: "Track daily movement and walking goals.", onClick: null },
+            { title: "Steps Tracking", icon: <Footprints className="w-10 h-10 text-emerald-400 mb-6" />, subtitle: "Track daily movement and walking goals.", onClick: () => navigate({ to: '/steps-dashboard' }) },
             { title: "Food Intake", icon: <Utensils className="w-10 h-10 text-orange-400 mb-6" />, subtitle: "Scan meals and track nutrition.", onClick: () => navigate({ to: '/food-dashboard' }) },
-            { title: "Water Intake", icon: <Droplets className="w-10 h-10 text-cyan-400 mb-6" />, subtitle: "Monitor hydration and water goals.", onClick: null },
+            { title: "Water Intake", icon: <Droplets className="w-10 h-10 text-cyan-400 mb-6" />, subtitle: "Monitor hydration and water goals.", onClick: () => navigate({ to: '/water-dashboard' }) },
             { title: "Medication Reminders", icon: <Pill className="w-10 h-10 text-purple-400 mb-6" />, subtitle: "Receive medicine reminders on time.", onClick: null },
             { title: "Activities", icon: <BrainCircuit className="w-10 h-10 text-blue-400 mb-6" />, subtitle: "Brain exercises and wellness activities.", onClick: null },
             { title: "AI Assistant", icon: <Bot className="w-10 h-10 text-rose-400 mb-6" />, subtitle: "Ask health-related questions and get guidance.", onClick: null },

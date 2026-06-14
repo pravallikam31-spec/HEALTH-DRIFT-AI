@@ -11,7 +11,7 @@ import {
   Camera, CloudUpload, Loader2, RotateCcw, Save, Sparkles, UtensilsCrossed, 
   ArrowLeft, TrendingUp, Zap, ListChecks, Share2, History, Flame
 } from "lucide-react";
-import { pipeline } from "@xenova/transformers";
+// Using perceptual hashing (pHash) based dataset matching instead of external classifier
 import { useAuth } from "@/lib/auth-context";
 import { format } from "date-fns";
 
@@ -23,39 +23,16 @@ const INDIAN_FOOD_LABELS = [
   "Egg Curry", "South Indian Thali", "North Indian Thali", "Snack", "Sweets",
 ];
 
+// Only include phase-1 supported foods with requested nutrition values; fallback entries retained minimally
 const NUTRITION_PRESETS: Record<string, { calories: number; protein: number; carbs: number; fat: number; serving: string }> = {
   Idli: { calories: 58, protein: 2, carbs: 12, fat: 0.4, serving: "1 Idli" },
-  Dosa: { calories: 168, protein: 4, carbs: 24, fat: 6, serving: "1 Dosa" },
-  "Masala Dosa": { calories: 380, protein: 8, carbs: 52, fat: 14, serving: "1 Dosa" },
-  Uttapam: { calories: 210, protein: 5, carbs: 32, fat: 7, serving: "1 Uttapam" },
-  Pongal: { calories: 240, protein: 7, carbs: 38, fat: 8, serving: "1 Bowl" },
+  Dosa: { calories: 168, protein: 4, carbs: 28, fat: 4, serving: "1 Dosa" },
   Upma: { calories: 190, protein: 5, carbs: 30, fat: 6, serving: "1 Bowl" },
-  Vada: { calories: 130, protein: 3, carbs: 15, fat: 7, serving: "1 Vada" },
-  Poha: { calories: 220, protein: 4, carbs: 34, fat: 8, serving: "1 Bowl" },
-  Chapati: { calories: 110, protein: 3, carbs: 20, fat: 2, serving: "1 Chapati" },
-  Roti: { calories: 100, protein: 3, carbs: 19, fat: 2, serving: "1 Roti" },
-  Paratha: { calories: 220, protein: 5, carbs: 28, fat: 9, serving: "1 Paratha" },
-  Puri: { calories: 110, protein: 2, carbs: 12, fat: 6, serving: "1 Puri" },
+  Pongal: { calories: 220, protein: 6, carbs: 34, fat: 7, serving: "1 Bowl" },
+  "Rice + Sambar": { calories: 320, protein: 9, carbs: 58, fat: 5, serving: "1 Plate" },
+  "South Indian Thali": { calories: 650, protein: 18, carbs: 95, fat: 18, serving: "1 Plate" },
+  // generic fallback
   Rice: { calories: 206, protein: 4, carbs: 45, fat: 0.4, serving: "1 Cup" },
-  "Lemon Rice": { calories: 280, protein: 5, carbs: 46, fat: 9, serving: "1 Plate" },
-  "Curd Rice": { calories: 260, protein: 7, carbs: 34, fat: 10, serving: "1 Bowl" },
-  Biryani: { calories: 520, protein: 19, carbs: 58, fat: 22, serving: "1 Plate" },
-  "Chicken Biryani": { calories: 560, protein: 28, carbs: 56, fat: 24, serving: "1 Plate" },
-  Pulav: { calories: 330, protein: 8, carbs: 54, fat: 10, serving: "1 Plate" },
-  Dal: { calories: 180, protein: 11, carbs: 22, fat: 5, serving: "1 Bowl" },
-  Sambar: { calories: 130, protein: 5, carbs: 19, fat: 4, serving: "1 Bowl" },
-  Rasam: { calories: 70, protein: 2, carbs: 10, fat: 2, serving: "1 Bowl" },
-  Rajma: { calories: 240, protein: 14, carbs: 34, fat: 6, serving: "1 Bowl" },
-  Chole: { calories: 260, protein: 13, carbs: 32, fat: 8, serving: "1 Bowl" },
-  "Paneer Butter Masala": { calories: 390, protein: 16, carbs: 18, fat: 29, serving: "1 Bowl" },
-  "Paneer Curry": { calories: 320, protein: 15, carbs: 14, fat: 24, serving: "1 Bowl" },
-  "Chicken Curry": { calories: 310, protein: 27, carbs: 8, fat: 18, serving: "1 Bowl" },
-  "Fish Curry": { calories: 280, protein: 24, carbs: 8, fat: 16, serving: "1 Bowl" },
-  "Egg Curry": { calories: 250, protein: 18, carbs: 9, fat: 16, serving: "1 Bowl" },
-  "South Indian Thali": { calories: 720, protein: 22, carbs: 96, fat: 28, serving: "1 Plate" },
-  "North Indian Thali": { calories: 780, protein: 25, carbs: 100, fat: 30, serving: "1 Plate" },
-  Snack: { calories: 180, protein: 4, carbs: 20, fat: 9, serving: "1 Serving" },
-  Sweets: { calories: 240, protein: 4, carbs: 36, fat: 10, serving: "1 Serving" },
 };
 
 type Nutrition = {
@@ -178,10 +155,85 @@ function readFileAsImageData(file: File) {
   });
 }
 
+function blobToDataURL(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read blob"));
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function computePHashFromDataUrl(dataUrl: string) {
+  // returns 64-bit binary string
+  const img = await loadImageFromDataUrl(dataUrl);
+  // draw to canvas resized
+  const size = 32;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas not available");
+  ctx.drawImage(img, 0, 0, size, size);
+  const imgData = ctx.getImageData(0, 0, size, size);
+  // convert to grayscale array
+  const vals: number[] = [];
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    const r = imgData.data[i];
+    const g = imgData.data[i + 1];
+    const b = imgData.data[i + 2];
+    vals.push(0.299 * r + 0.587 * g + 0.114 * b);
+  }
+  // simple DCT via 8x8 on 32x32 by downsampling blockwise to 8x8
+  const small: number[] = [];
+  const block = 4; // 32/8=4
+  for (let by = 0; by < 8; by++) {
+    for (let bx = 0; bx < 8; bx++) {
+      let sum = 0;
+      for (let y = 0; y < block; y++) {
+        for (let x = 0; x < block; x++) {
+          const sx = bx * block + x;
+          const sy = by * block + y;
+          sum += vals[sy * size + sx];
+        }
+      }
+      small.push(sum / (block * block));
+    }
+  }
+  const avg = small.reduce((a, b) => a + b, 0) / small.length;
+  const bits = small.map((v) => (v > avg ? "1" : "0")).join("");
+  // pad to 64
+  return bits.padStart(64, "0");
+}
+
+function hammingDistanceBinary(a: string, b: string) {
+  // both binary strings
+  if (a.length !== b.length) {
+    // pad
+    const len = Math.max(a.length, b.length);
+    a = a.padStart(len, "0");
+    b = b.padStart(len, "0");
+  }
+  let d = 0;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++;
+  return d;
+}
+
+function loadImageFromDataUrl(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = dataUrl;
+  });
+}
+
 export function FoodDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [modelReady, setModelReady] = React.useState(false);
+  const [datasetError, setDatasetError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [analyzing, setAnalyzing] = React.useState(false);
   const [cameraActive, setCameraActive] = React.useState(false);
@@ -195,7 +247,7 @@ export function FoodDashboard() {
   const [cameraError, setCameraError] = React.useState<string | null>(null);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
-  const classifierRef = React.useRef<Awaited<ReturnType<typeof pipeline>> | null>(null);
+  const datasetHashesRef = React.useRef<Record<string, string[]>>({});
 
   const userId = user?.uid ?? "";
 
@@ -233,23 +285,77 @@ export function FoodDashboard() {
   }, [userId]);
 
   React.useEffect(() => {
+    // Load dataset manifest and prepare perceptual-hashes cache
     let cancelled = false;
-    async function loadClassifier() {
+    async function loadDataset() {
       try {
-        const classifier = await pipeline("zero-shot-image-classification", "Xenova/clip-vit-base-patch32");
-        if (!cancelled) {
-          classifierRef.current = classifier;
-          setModelReady(true);
+        console.log("[Food AI] Loading dataset...");
+        const resp = await fetch("/food-dataset/dataset.json");
+        if (!resp.ok) {
+          throw new Error("Dataset manifest missing");
         }
-      } catch (error) {
-        console.error("Food model failed to load", error);
+        console.log("[Food AI] Dataset manifest found");
+        const manifest: Record<string, string[]> = await resp.json();
+
+        const categories = ["idli", "dosa", "pongal", "upma", "rice-sambar", "thali"];
+        const hashes: Record<string, string[]> = {};
+        let totalImages = 0;
+        let successfulHashes = 0;
+
+        for (const category of categories) {
+          const imageList = manifest[category] ?? [];
+          hashes[category] = [];
+          console.log(`[Food AI] ${category}: ${imageList.length} images`);
+          totalImages += imageList.length;
+          for (const relativePath of imageList) {
+            try {
+              // URL-encode the filename to handle spaces and special characters
+              const encodedPath = encodeURIComponent(relativePath);
+              const url = relativePath.startsWith("/") ? relativePath : `/food-dataset/${category}/${encodedPath}`;
+              const response = await fetch(url);
+              if (!response.ok) {
+                console.warn(`[Food AI] Failed to load image URL: ${url}`);
+                continue;
+              }
+              const dataUrl = await response.blob().then(blobToDataURL);
+              const h = await computePHashFromDataUrl(dataUrl);
+              hashes[category].push(h);
+              successfulHashes++;
+            } catch (e) {
+              console.warn("[Food AI] Failed hashing dataset image", category, relativePath, e);
+            }
+          }
+        }
+
+        if (totalImages === 0) {
+          throw new Error("No training images found in food-dataset folders");
+        }
+
+        if (successfulHashes === 0) {
+          throw new Error("Failed to compute hashes for any dataset images");
+        }
+
+        console.log("[Food AI] Images loaded:", totalImages);
+        console.log("[Food AI] Successful hashes:", successfulHashes);
+        console.log("[Food AI] Building hashes...");
+
         if (!cancelled) {
-          toast.error("Food detection model could not load.");
+          datasetHashesRef.current = hashes;
+          setDatasetError(null);
+          setModelReady(true);
+          console.log("[Food AI] Model Ready");
+        }
+      } catch (error: any) {
+        console.error("[Food AI] Initialization Failed", error);
+        const errorMsg = error?.message ?? "Dataset initialization failed";
+        setDatasetError(errorMsg);
+        if (!cancelled) {
+          toast.error(`Food AI Error: ${errorMsg}`);
         }
       }
     }
 
-    loadClassifier();
+    loadDataset();
     return () => {
       cancelled = true;
     };
@@ -293,13 +399,44 @@ export function FoodDashboard() {
   }
 
   async function analyzeImage(source: string, imageSize: { width: number; height: number }) {
-    const classifier = classifierRef.current;
-    if (!classifier) {
-      throw new Error("Model not ready");
+    if (!modelReady) {
+      throw new Error(datasetError ?? "Dataset initialization failed");
     }
-    const output = await classifier(source, INDIAN_FOOD_LABELS, { hypothesis_template: "This image contains {} food" });
-    const best = Array.isArray(output) ? output[0] : output;
-    return buildMealNutrition(best.label, best.score, imageSize);
+    // Compute pHash for source image
+    const phash = await computePHashFromDataUrl(source);
+
+    // Compare with dataset hashes
+    const categories = Object.keys(datasetHashesRef.current);
+    if (categories.length === 0) throw new Error("No dataset images available for matching.");
+
+    let bestCat = "Unknown";
+    let bestScore = 0;
+
+    for (const cat of categories) {
+      const hashes = datasetHashesRef.current[cat] ?? [];
+      if (hashes.length === 0) continue;
+      // compute similarities and take average
+      const sims = hashes.map((h) => 1 - hammingDistanceBinary(h, phash) / 64);
+      const avg = sims.reduce((a, b) => a + b, 0) / sims.length;
+      if (avg > bestScore) {
+        bestScore = avg;
+        bestCat = cat;
+      }
+    }
+
+    // Map category folder names to display labels used in nutrition presets
+    const folderToLabel: Record<string, string> = {
+      idli: "Idli",
+      dosa: "Dosa",
+      thali: "South Indian Thali",
+      "rice-sambar": "Rice + Sambar",
+      upma: "Upma",
+      pongal: "Pongal",
+    };
+
+    const label = folderToLabel[bestCat.toLowerCase()] ?? bestCat;
+    const confidence = bestScore; // 0..1
+    return buildMealNutrition(label, confidence, imageSize);
   }
 
   async function handleFileChange(file: File) {
@@ -474,7 +611,15 @@ export function FoodDashboard() {
 
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {analyzing ? "Running food detection..." : "Model status: " + (modelReady ? "Ready" : "Loading...")}
+              {analyzing ? (
+                "Running food detection..."
+              ) : datasetError ? (
+                `Model status: Error — ${datasetError}`
+              ) : modelReady ? (
+                "Model status: Ready"
+              ) : (
+                "Model status: Loading..."
+              )}
             </div>
           </CardContent>
         </Card>
