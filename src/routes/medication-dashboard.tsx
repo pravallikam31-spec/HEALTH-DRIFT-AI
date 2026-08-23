@@ -41,8 +41,11 @@ interface TemporaryMedicine {
   id: string;
   medicineName: string;
   morning: boolean;
+  morningType: "before" | "after" | "";
   noon: boolean;
+  noonType: "before" | "after" | "";
   night: boolean;
+  nightType: "before" | "after" | "";
   startDate: string;
   endDate: string;
   beforeFood: boolean;
@@ -59,8 +62,11 @@ function MedicationDashboard() {
   const [newTempMed, setNewTempMed] = React.useState({
     name: "",
     morning: false,
+    morningType: "before" as "before" | "after" | "",
     noon: false,
+    noonType: "before" as "before" | "after" | "",
     night: false,
+    nightType: "before" as "before" | "after" | "",
     startDate: "",
     endDate: "",
     beforeFood: true,
@@ -123,35 +129,37 @@ function MedicationDashboard() {
     try {
       const id = `temp_${Date.now()}`;
       const ref = doc(db, "users", user.uid, "temporary_medications", id);
-      await setDoc(ref, {
+      const payload = {
         medicineName: newTempMed.name.trim(),
         morning: newTempMed.morning,
+        morningType: newTempMed.morning ? newTempMed.morningType || "before" : "",
         noon: newTempMed.noon,
+        noonType: newTempMed.noon ? newTempMed.noonType || "before" : "",
         night: newTempMed.night,
+        nightType: newTempMed.night ? newTempMed.nightType || "before" : "",
         startDate: newTempMed.startDate,
         endDate: newTempMed.endDate,
         beforeFood: newTempMed.beforeFood,
-      });
+      };
+
+      await setDoc(ref, payload);
 
       setTempMedicines((prev) => [
         ...prev,
         {
           id,
-          medicineName: newTempMed.name.trim(),
-          morning: newTempMed.morning,
-          noon: newTempMed.noon,
-          night: newTempMed.night,
-          startDate: newTempMed.startDate,
-          endDate: newTempMed.endDate,
-          beforeFood: newTempMed.beforeFood,
+          ...payload,
         },
       ]);
 
       setNewTempMed({
         name: "",
         morning: false,
+        morningType: "before",
         noon: false,
+        noonType: "before",
         night: false,
+        nightType: "before",
         startDate: "",
         endDate: "",
         beforeFood: true,
@@ -196,14 +204,34 @@ function MedicationDashboard() {
   const medicines = profile?.currentMedications || [];
   const today = new Date().toLocaleDateString("en-CA");
 
+  const getTimeLabel = (enabled: boolean, type: "before" | "after" | "", label: string) => {
+    if (!enabled) return null;
+    const resolvedType = type === "before" || type === "after" ? type : "before";
+    return `${label} • ${resolvedType === "before" ? "Before Food" : "After Food"}`;
+  };
+
+  const getTempTimeLabels = (med: TemporaryMedicine) => {
+    const labels: string[] = [];
+    const morningLabel = getTimeLabel(med.morning, med.morningType || (med.beforeFood ? "before" : "after"), "Morning");
+    const noonLabel = getTimeLabel(med.noon, med.noonType || (med.beforeFood ? "before" : "after"), "Noon");
+    const nightLabel = getTimeLabel(med.night, med.nightType || (med.beforeFood ? "before" : "after"), "Night");
+    [morningLabel, noonLabel, nightLabel].forEach((label) => {
+      if (label) labels.push(label);
+    });
+    return labels;
+  };
+
   const getTodaysMedicines = () => {
     const result: { name: string; times: string[] }[] = [];
 
     schedules.forEach((schedule) => {
       const times: string[] = [];
-      if (schedule.morning) times.push(`Morning • ${schedule.morningType === "before" ? "Before Food" : "After Food"}`);
-      if (schedule.noon) times.push(`Noon • ${schedule.noonType === "before" ? "Before Food" : "After Food"}`);
-      if (schedule.night) times.push(`Night • ${schedule.nightType === "before" ? "Before Food" : "After Food"}`);
+      const morningLabel = getTimeLabel(schedule.morning, schedule.morningType, "Morning");
+      const noonLabel = getTimeLabel(schedule.noon, schedule.noonType, "Noon");
+      const nightLabel = getTimeLabel(schedule.night, schedule.nightType, "Night");
+      [morningLabel, noonLabel, nightLabel].forEach((label) => {
+        if (label) times.push(label);
+      });
       if (times.length > 0) {
         result.push({ name: schedule.medicineName, times });
       }
@@ -211,10 +239,7 @@ function MedicationDashboard() {
 
     tempMedicines.forEach((med) => {
       if (new Date(med.startDate) <= new Date(today) && new Date(med.endDate) >= new Date(today)) {
-        const times: string[] = [];
-        if (med.morning) times.push(`Morning • ${med.beforeFood ? "Before Food" : "After Food"}`);
-        if (med.noon) times.push(`Noon • ${med.beforeFood ? "Before Food" : "After Food"}`);
-        if (med.night) times.push(`Night • ${med.beforeFood ? "Before Food" : "After Food"}`);
+        const times = getTempTimeLabels(med);
         if (times.length > 0) {
           result.push({ name: med.medicineName, times });
         }
@@ -380,37 +405,48 @@ function MedicationDashboard() {
 
                   <div className="grid grid-cols-3 gap-4">
                     {["morning", "noon", "night"].map((time) => (
-                      <label key={time} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={newTempMed[time as keyof typeof newTempMed] as boolean}
-                          onChange={(e) => setNewTempMed((prev) => ({ ...prev, [time]: e.target.checked }))}
-                          className="rounded border-white/20 bg-black/20"
-                        />
-                        {time.charAt(0).toUpperCase() + time.slice(1)}
-                      </label>
-                    ))}
-                  </div>
+                      <div key={time} className="space-y-2">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(newTempMed[time as keyof typeof newTempMed])}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setNewTempMed((prev) => ({
+                                ...prev,
+                                [time]: checked,
+                                [`${time}Type`]: checked ? prev[`${time}Type` as keyof typeof prev] || "before" : "",
+                              }));
+                            }}
+                            className="rounded border-white/20 bg-black/20"
+                          />
+                          {time.charAt(0).toUpperCase() + time.slice(1)}
+                        </label>
 
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="temp-food"
-                        checked={newTempMed.beforeFood}
-                        onChange={() => setNewTempMed((prev) => ({ ...prev, beforeFood: true }))}
-                      />
-                      Before Food
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="temp-food"
-                        checked={!newTempMed.beforeFood}
-                        onChange={() => setNewTempMed((prev) => ({ ...prev, beforeFood: false }))}
-                      />
-                      After Food
-                    </label>
+                        {Boolean(newTempMed[time as keyof typeof newTempMed]) && (
+                          <div className="ml-6 space-y-1 text-sm">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name={`temp-${time}`}
+                                checked={newTempMed[`${time}Type` as keyof typeof newTempMed] === "before"}
+                                onChange={() => setNewTempMed((prev) => ({ ...prev, [`${time}Type`]: "before" }))}
+                              />
+                              Before Food
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name={`temp-${time}`}
+                                checked={newTempMed[`${time}Type` as keyof typeof newTempMed] === "after"}
+                                onChange={() => setNewTempMed((prev) => ({ ...prev, [`${time}Type`]: "after" }))}
+                              />
+                              After Food
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -435,7 +471,10 @@ function MedicationDashboard() {
                   </div>
 
                   <GlowButton
-                    onClick={addTemporaryMedicine}
+                    type="button"
+                    onClick={() => {
+                      void addTemporaryMedicine();
+                    }}
                     className="w-full bg-gradient-to-r from-blue-500/20 to-blue-600/20 border border-blue-400/30 flex items-center justify-center gap-2"
                   >
                     <Plus className="w-5 h-5" /> Add Temporary Medicine
@@ -453,6 +492,15 @@ function MedicationDashboard() {
                           <p className="text-sm text-muted-foreground">
                             {med.startDate} to {med.endDate}
                           </p>
+                          {getTempTimeLabels(med).length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {getTempTimeLabels(med).map((timeLabel, index) => (
+                                <span key={`${med.id}-${timeLabel}-${index}`} className="text-xs bg-blue-500/20 border border-blue-400/30 rounded-full px-2 py-1">
+                                  {timeLabel}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <button
                           onClick={() => deleteTempMedicine(med.id)}

@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "cd /d \"C:\\Users\\prava\\OneDrive\\Desktop\\MPP2\\Nexus-Health-drift-AI\" && firebase use health-drift-ai && firebase deploy --only firestore:rules --project health-drift-ai": "civicq-7a733"
+  },
+  "targets": {},
+  "etags": {}
+}

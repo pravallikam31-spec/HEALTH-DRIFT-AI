@@ -1,0 +1,37 @@
+
+> build
+> vite build
+
+[@lovable.dev/vite-tanstack-config] No Lovable context detected — skipping nitro deploy plugin. Pass `nitro: true` (or `nitro: { ... }`) to force-enable.
+[@lovable.dev/vite-tanstack-config] No Lovable context detected — skipping nitro deploy plugin. Pass `nitro: true` (or `nitro: { ... }`) to force-enable.
+[@lovable.dev/vite-tanstack-config] No Lovable context detected — skipping nitro deploy plugin. Pass `nitro: true` (or `nitro: { ... }`) to force-enable.
+[36mvite v7.3.5 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 2731 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/client/[22m[32massets/heart-anatomical-BWzPZYJ_.png  [39m[1m[2m  858.62 kB[22m[1m[22m
+[2mdist/client/[22m[35massets/styles-BZCG3zJA.css            [39m[1m[2m  109.88 kB[22m[1m[22m[2m │ gzip:  18.73 kB[22m
+[2mdist/client/[22m[36massets/Heart3D-D1PQ6ZMu.js            [39m[1m[2m    1.33 kB[22m[1m[22m[2m │ gzip:   0.70 kB[22m
+[2mdist/client/[22m[36massets/index-BeqwmUEK.js              [39m[1m[33m1,972.71 kB[39m[22m[2m │ gzip: 570.57 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 15.95s[39m
+[36mvite v7.3.5 [32mbuilding ssr environment for production...[36m[39m
+transforming...
+[33m"createRequestHandler", "defineHandlerCallback", "transformPipeableStreamWithRouter" and "transformReadableStreamWithRouter" are imported from external module "@tanstack/router-core/ssr/server" but never used in "../../../../../../../C:/Users/prava/OneDrive/Desktop/MPP2/Nexus-Health-drift-AI/node_modules/@tanstack/start-server-core/dist/esm/index.js".[39m
+[33m"RawStream" is imported from external module "@tanstack/router-core" but never used in "../../../../../../../C:/Users/prava/OneDrive/Desktop/MPP2/Nexus-Health-drift-AI/node_modules/@tanstack/start-client-core/dist/esm/index.js".[39m
+[33m"hydrate" and "json" are imported from external module "@tanstack/router-core/ssr/client" but never used in "../../../../../../../C:/Users/prava/OneDrive/Desktop/MPP2/Nexus-Health-drift-AI/node_modules/@tanstack/start-client-core/dist/esm/index.js".[39m
+[32m✓[39m 95 modules transformed.
+rendering chunks...
+[2mdist/server/[22m[36massets/empty-plugin-adapters-BFgPZ6_d.js       [39m[1m[2m  0.13 kB[22m[1m[22m
+[2mdist/server/[22m[36massets/_tanstack-start-manifest_v-CemZnLAH.js  [39m[1m[2m  0.48 kB[22m[1m[22m
+[2mdist/server/[22m[36massets/start-CqncqEEO.js                       [39m[1m[2m  1.71 kB[22m[1m[22m
+[2mdist/server/[22m[36massets/Heart3D-DgABEFNC.js                     [39m[1m[2m  2.34 kB[22m[1m[22m
+[2mdist/server/[22m[36mserver.js                                      [39m[1m[2m  3.86 kB[22m[1m[22m
+[2mdist/server/[22m[36massets/server-CS8KoNfS.js                      [39m[1m[2m 58.45 kB[22m[1m[22m
+[2mdist/server/[22m[36massets/router-DppojKOt.js                      [39m[1m[2m226.22 kB[22m[1m[22m
+[32m✓ built in 1.23s[39m

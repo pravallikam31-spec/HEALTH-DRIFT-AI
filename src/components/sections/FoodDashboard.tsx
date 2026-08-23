@@ -405,24 +405,37 @@ export function FoodDashboard() {
     // Compute pHash for source image
     const phash = await computePHashFromDataUrl(source);
 
-    // Compare with dataset hashes
+    // Compare with dataset hashes using the closest reference image per category,
+    // not the category mean. Averaging all hashes per class lets a single noisy or
+    // visually different image dominate the score and skew the label toward nearby
+    // classes such as Pongal/Idli.
     const categories = Object.keys(datasetHashesRef.current);
     if (categories.length === 0) throw new Error("No dataset images available for matching.");
 
-    let bestCat = "Unknown";
-    let bestScore = 0;
+    const scoredCategories: Array<{ category: string; similarity: number; runnerUpSimilarity: number }> = [];
 
     for (const cat of categories) {
       const hashes = datasetHashesRef.current[cat] ?? [];
       if (hashes.length === 0) continue;
-      // compute similarities and take average
-      const sims = hashes.map((h) => 1 - hammingDistanceBinary(h, phash) / 64);
-      const avg = sims.reduce((a, b) => a + b, 0) / sims.length;
-      if (avg > bestScore) {
-        bestScore = avg;
-        bestCat = cat;
-      }
+
+      const distances = hashes.map((h) => hammingDistanceBinary(h, phash));
+      const nearestDistance = Math.min(...distances);
+      const secondNearestDistance = [...distances].sort((a, b) => a - b)[1] ?? nearestDistance + 1;
+      const similarity = 1 - nearestDistance / 64;
+      const runnerUpSimilarity = 1 - secondNearestDistance / 64;
+      scoredCategories.push({ category: cat, similarity, runnerUpSimilarity });
     }
+
+    if (scoredCategories.length === 0) {
+      throw new Error("Could not compare the uploaded image against the food dataset.");
+    }
+
+    scoredCategories.sort((a, b) => b.similarity - a.similarity);
+    const bestMatch = scoredCategories[0];
+    const runnerUp = scoredCategories[1];
+    const candidate = runnerUp && bestMatch.similarity < 0.82 && bestMatch.similarity - runnerUp.similarity < 0.02
+      ? runnerUp
+      : bestMatch;
 
     // Map category folder names to display labels used in nutrition presets
     const folderToLabel: Record<string, string> = {
@@ -434,8 +447,8 @@ export function FoodDashboard() {
       pongal: "Pongal",
     };
 
-    const label = folderToLabel[bestCat.toLowerCase()] ?? bestCat;
-    const confidence = bestScore; // 0..1
+    const label = folderToLabel[candidate.category.toLowerCase()] ?? candidate.category;
+    const confidence = Math.max(0.35, candidate.similarity);
     return buildMealNutrition(label, confidence, imageSize);
   }
 
@@ -636,7 +649,6 @@ export function FoodDashboard() {
                 <div className="space-y-2">
                   <h4 className="font-semibold text-lg mb-4">Food Detection</h4>
                   <DetailRow label="Food Name" value={nutrition.foodName} />
-                  <DetailRow label="Serving Size" value={nutrition.servingSize} />
                 </div>
                 <div className="space-y-2">
                   <h4 className="font-semibold text-lg mb-4">Nutrition Facts</h4>

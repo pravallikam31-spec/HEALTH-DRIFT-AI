@@ -30,6 +30,7 @@ function WaterDashboardPage() {
 
 type WaterEntry = {
   amount: number;
+  amountMl?: number;
   timestamp: Timestamp | null;
   date: string;
 };
@@ -90,21 +91,17 @@ function WaterDashboard() {
           }
         }
 
-        const waterDocRef = doc(db, "water_logs", userId);
-        const waterDocSnap = await getDoc(waterDocRef);
-        if (waterDocSnap.exists()) {
-          const waterData = waterDocSnap.data() as Record<string, unknown>;
-          // Backwards-compat: support either `hours`/`minutes` or legacy `interval` in hours
-          const hasHours = typeof waterData.hours === "number" || typeof waterData.hours === "string";
-          const hasMinutes = typeof waterData.minutes === "number" || typeof waterData.minutes === "string";
-          if (hasHours || hasMinutes) {
-            const h = Number(waterData.hours ?? 0);
-            const m = Number(waterData.minutes ?? 0);
-            setSettings({ enabled: Boolean(waterData.enabled), hours: Number.isNaN(h) ? 0 : h, minutes: Number.isNaN(m) ? 0 : m });
-          } else {
-            const interval = Number(waterData.interval ?? 2);
-            setSettings({ enabled: Boolean(waterData.enabled), hours: Number.isNaN(interval) ? 2 : interval, minutes: 0 });
-          }
+        const reminderRef = doc(db, "users", userId, "waterReminderSettings", "settings");
+        const reminderSnap = await getDoc(reminderRef);
+        if (reminderSnap.exists()) {
+          const reminderData = reminderSnap.data() as Record<string, unknown>;
+          const hours = Number(reminderData.hours ?? 0);
+          const minutes = Number(reminderData.minutes ?? 0);
+          setSettings({
+            enabled: Boolean(reminderData.enabled),
+            hours: Number.isFinite(hours) ? hours : 0,
+            minutes: Number.isFinite(minutes) ? minutes : 0,
+          });
         }
 
         await loadEntries(userId, today);
@@ -119,12 +116,21 @@ function WaterDashboard() {
   }, [userId, today]);
 
   async function loadEntries(uid: string, currentDate: string) {
-    const waterDocRef = doc(db, "water_logs", uid);
-    const entriesRef = collection(waterDocRef, "entries");
+    const entriesRef = collection(db, "users", uid, "waterLogs");
     const waterQuery = query(entriesRef, where("date", "==", currentDate));
     const snapshot = await getDocs(waterQuery);
     const loaded: WaterEntry[] = snapshot.docs
-      .map((docSnap) => docSnap.data() as WaterEntry)
+      .map((docSnap) => {
+        const data = docSnap.data() as Record<string, unknown>;
+        const amountValue = Number(data.amountMl ?? data.amount ?? 0);
+        const timestampValue = data.timestamp && typeof data.timestamp === "object" && "toDate" in data.timestamp ? (data.timestamp as Timestamp) : null;
+        return {
+          amount: Number.isFinite(amountValue) ? amountValue : 0,
+          amountMl: Number.isFinite(amountValue) ? amountValue : 0,
+          timestamp: timestampValue,
+          date: String(data.date ?? currentDate),
+        };
+      })
       .sort((a, b) => {
         const aTs = a.timestamp?.toMillis?.() ?? 0;
         const bTs = b.timestamp?.toMillis?.() ?? 0;
@@ -159,12 +165,13 @@ function WaterDashboard() {
   async function addWater(amount: number) {
     if (!userId || amount <= 0) return;
     try {
-      const waterDocRef = doc(db, "water_logs", userId);
-      const entriesRef = collection(waterDocRef, "entries");
-      await addDoc(entriesRef, {
+      const waterLogRef = doc(collection(db, "users", userId, "waterLogs"));
+      await setDoc(waterLogRef, {
         amount,
-        timestamp: serverTimestamp(),
+        amountMl: amount,
         date: today,
+        timestamp: serverTimestamp(),
+        userId: userId,
       });
       await loadEntries(userId, today);
     } catch (error) {
@@ -183,8 +190,8 @@ function WaterDashboard() {
     if (!userId) return;
     setSavingSettings(true);
     try {
-      const waterDocRef = doc(db, "water_logs", userId);
-      await setDoc(waterDocRef, {
+      const reminderRef = doc(db, "users", userId, "waterReminderSettings", "settings");
+      await setDoc(reminderRef, {
         enabled: updatedSettings.enabled,
         hours: updatedSettings.hours,
         minutes: updatedSettings.minutes,
