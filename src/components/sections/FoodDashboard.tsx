@@ -11,9 +11,12 @@ import {
   Camera, CloudUpload, Loader2, RotateCcw, Save, Sparkles, UtensilsCrossed, 
   ArrowLeft, TrendingUp, Zap, ListChecks, Share2, History, Flame
 } from "lucide-react";
-// Using perceptual hashing (pHash) based dataset matching instead of external classifier
 import { useAuth } from "@/lib/auth-context";
 import { format } from "date-fns";
+
+const FOOD_RECOGNITION_API_URL = "http://127.0.0.1:5000/predict";
+const FOOD_RECOGNITION_UNAVAILABLE_MESSAGE =
+  "Food recognition service is unavailable. Please make sure the Flask server is running.";
 
 const INDIAN_FOOD_LABELS = [
   "Idli", "Dosa", "Masala Dosa", "Uttapam", "Pongal", "Upma", "Vada", "Poha",
@@ -118,12 +121,13 @@ function normalizePrediction(label: string) {
 }
 
 function buildMealNutrition(label: string, confidence: number, imageSize: { width: number; height: number }): Nutrition {
-  const foodName = normalizePrediction(label);
-  const base = NUTRITION_PRESETS[foodName] ?? NUTRITION_PRESETS.Rice;
-  const servingSize = classifyServingSize(foodName, confidence, imageSize);
+  const displayFoodName = label;
+  const nutritionLabel = normalizePrediction(label);
+  const base = NUTRITION_PRESETS[nutritionLabel] ?? NUTRITION_PRESETS.Rice;
+  const servingSize = classifyServingSize(nutritionLabel, confidence, imageSize);
   const scaled = scaleNutrition(base, servingSize, confidence);
   return {
-    foodName,
+    foodName: displayFoodName,
     servingSize,
     calories: scaled.calories,
     protein: scaled.protein,
@@ -155,85 +159,9 @@ function readFileAsImageData(file: File) {
   });
 }
 
-function blobToDataURL(blob: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read blob"));
-    reader.onload = () => resolve(String(reader.result));
-    reader.readAsDataURL(blob);
-  });
-}
-
-async function computePHashFromDataUrl(dataUrl: string) {
-  // returns 64-bit binary string
-  const img = await loadImageFromDataUrl(dataUrl);
-  // draw to canvas resized
-  const size = 32;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas not available");
-  ctx.drawImage(img, 0, 0, size, size);
-  const imgData = ctx.getImageData(0, 0, size, size);
-  // convert to grayscale array
-  const vals: number[] = [];
-  for (let i = 0; i < imgData.data.length; i += 4) {
-    const r = imgData.data[i];
-    const g = imgData.data[i + 1];
-    const b = imgData.data[i + 2];
-    vals.push(0.299 * r + 0.587 * g + 0.114 * b);
-  }
-  // simple DCT via 8x8 on 32x32 by downsampling blockwise to 8x8
-  const small: number[] = [];
-  const block = 4; // 32/8=4
-  for (let by = 0; by < 8; by++) {
-    for (let bx = 0; bx < 8; bx++) {
-      let sum = 0;
-      for (let y = 0; y < block; y++) {
-        for (let x = 0; x < block; x++) {
-          const sx = bx * block + x;
-          const sy = by * block + y;
-          sum += vals[sy * size + sx];
-        }
-      }
-      small.push(sum / (block * block));
-    }
-  }
-  const avg = small.reduce((a, b) => a + b, 0) / small.length;
-  const bits = small.map((v) => (v > avg ? "1" : "0")).join("");
-  // pad to 64
-  return bits.padStart(64, "0");
-}
-
-function hammingDistanceBinary(a: string, b: string) {
-  // both binary strings
-  if (a.length !== b.length) {
-    // pad
-    const len = Math.max(a.length, b.length);
-    a = a.padStart(len, "0");
-    b = b.padStart(len, "0");
-  }
-  let d = 0;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++;
-  return d;
-}
-
-function loadImageFromDataUrl(dataUrl: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = (e) => reject(e);
-    img.src = dataUrl;
-  });
-}
-
 export function FoodDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [modelReady, setModelReady] = React.useState(false);
-  const [datasetError, setDatasetError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [analyzing, setAnalyzing] = React.useState(false);
   const [cameraActive, setCameraActive] = React.useState(false);
@@ -247,7 +175,6 @@ export function FoodDashboard() {
   const [cameraError, setCameraError] = React.useState<string | null>(null);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
-  const datasetHashesRef = React.useRef<Record<string, string[]>>({});
 
   const userId = user?.uid ?? "";
 
@@ -283,83 +210,6 @@ export function FoodDashboard() {
 
     loadEntries().catch((error) => console.error("Failed to load food entries", error));
   }, [userId]);
-
-  React.useEffect(() => {
-    // Load dataset manifest and prepare perceptual-hashes cache
-    let cancelled = false;
-    async function loadDataset() {
-      try {
-        console.log("[Food AI] Loading dataset...");
-        const resp = await fetch("/food-dataset/dataset.json");
-        if (!resp.ok) {
-          throw new Error("Dataset manifest missing");
-        }
-        console.log("[Food AI] Dataset manifest found");
-        const manifest: Record<string, string[]> = await resp.json();
-
-        const categories = ["idli", "dosa", "pongal", "upma", "rice-sambar", "thali"];
-        const hashes: Record<string, string[]> = {};
-        let totalImages = 0;
-        let successfulHashes = 0;
-
-        for (const category of categories) {
-          const imageList = manifest[category] ?? [];
-          hashes[category] = [];
-          console.log(`[Food AI] ${category}: ${imageList.length} images`);
-          totalImages += imageList.length;
-          for (const relativePath of imageList) {
-            try {
-              // URL-encode the filename to handle spaces and special characters
-              const encodedPath = encodeURIComponent(relativePath);
-              const url = relativePath.startsWith("/") ? relativePath : `/food-dataset/${category}/${encodedPath}`;
-              const response = await fetch(url);
-              if (!response.ok) {
-                console.warn(`[Food AI] Failed to load image URL: ${url}`);
-                continue;
-              }
-              const dataUrl = await response.blob().then(blobToDataURL);
-              const h = await computePHashFromDataUrl(dataUrl);
-              hashes[category].push(h);
-              successfulHashes++;
-            } catch (e) {
-              console.warn("[Food AI] Failed hashing dataset image", category, relativePath, e);
-            }
-          }
-        }
-
-        if (totalImages === 0) {
-          throw new Error("No training images found in food-dataset folders");
-        }
-
-        if (successfulHashes === 0) {
-          throw new Error("Failed to compute hashes for any dataset images");
-        }
-
-        console.log("[Food AI] Images loaded:", totalImages);
-        console.log("[Food AI] Successful hashes:", successfulHashes);
-        console.log("[Food AI] Building hashes...");
-
-        if (!cancelled) {
-          datasetHashesRef.current = hashes;
-          setDatasetError(null);
-          setModelReady(true);
-          console.log("[Food AI] Model Ready");
-        }
-      } catch (error: any) {
-        console.error("[Food AI] Initialization Failed", error);
-        const errorMsg = error?.message ?? "Dataset initialization failed";
-        setDatasetError(errorMsg);
-        if (!cancelled) {
-          toast.error(`Food AI Error: ${errorMsg}`);
-        }
-      }
-    }
-
-    loadDataset();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   React.useEffect(() => {
     return () => {
@@ -398,57 +248,43 @@ export function FoodDashboard() {
     setStreamReady(false);
   }
 
-  async function analyzeImage(source: string, imageSize: { width: number; height: number }) {
-    if (!modelReady) {
-      throw new Error(datasetError ?? "Dataset initialization failed");
-    }
-    // Compute pHash for source image
-    const phash = await computePHashFromDataUrl(source);
+  async function analyzeImage(file: File, imageSize: { width: number; height: number }) {
+    const formData = new FormData();
+    formData.append("image", file);
 
-    // Compare with dataset hashes using the closest reference image per category,
-    // not the category mean. Averaging all hashes per class lets a single noisy or
-    // visually different image dominate the score and skew the label toward nearby
-    // classes such as Pongal/Idli.
-    const categories = Object.keys(datasetHashesRef.current);
-    if (categories.length === 0) throw new Error("No dataset images available for matching.");
-
-    const scoredCategories: Array<{ category: string; similarity: number; runnerUpSimilarity: number }> = [];
-
-    for (const cat of categories) {
-      const hashes = datasetHashesRef.current[cat] ?? [];
-      if (hashes.length === 0) continue;
-
-      const distances = hashes.map((h) => hammingDistanceBinary(h, phash));
-      const nearestDistance = Math.min(...distances);
-      const secondNearestDistance = [...distances].sort((a, b) => a - b)[1] ?? nearestDistance + 1;
-      const similarity = 1 - nearestDistance / 64;
-      const runnerUpSimilarity = 1 - secondNearestDistance / 64;
-      scoredCategories.push({ category: cat, similarity, runnerUpSimilarity });
+    let response: Response;
+    try {
+      response = await fetch(FOOD_RECOGNITION_API_URL, {
+        method: "POST",
+        body: formData,
+      });
+    } catch {
+      throw new Error(FOOD_RECOGNITION_UNAVAILABLE_MESSAGE);
     }
 
-    if (scoredCategories.length === 0) {
-      throw new Error("Could not compare the uploaded image against the food dataset.");
+    if (!response.ok) {
+      if (response.status >= 500) {
+        throw new Error(FOOD_RECOGNITION_UNAVAILABLE_MESSAGE);
+      }
+      throw new Error(`Food recognition request failed (HTTP ${response.status}).`);
     }
 
-    scoredCategories.sort((a, b) => b.similarity - a.similarity);
-    const bestMatch = scoredCategories[0];
-    const runnerUp = scoredCategories[1];
-    const candidate = runnerUp && bestMatch.similarity < 0.82 && bestMatch.similarity - runnerUp.similarity < 0.02
-      ? runnerUp
-      : bestMatch;
-
-    // Map category folder names to display labels used in nutrition presets
-    const folderToLabel: Record<string, string> = {
-      idli: "Idli",
-      dosa: "Dosa",
-      thali: "South Indian Thali",
-      "rice-sambar": "Rice + Sambar",
-      upma: "Upma",
-      pongal: "Pongal",
+    const prediction = (await response.json()) as {
+      predicted_food?: unknown;
+      confidence?: unknown;
     };
+    const label = prediction.predicted_food;
+    const confidence = prediction.confidence;
+    if (
+      typeof label !== "string" ||
+      typeof confidence !== "number" ||
+      !Number.isFinite(confidence) ||
+      confidence < 0 ||
+      confidence > 1
+    ) {
+      throw new Error("Food recognition service returned an invalid prediction.");
+    }
 
-    const label = folderToLabel[candidate.category.toLowerCase()] ?? candidate.category;
-    const confidence = Math.max(0.35, candidate.similarity);
     return buildMealNutrition(label, confidence, imageSize);
   }
 
@@ -458,7 +294,7 @@ export function FoodDashboard() {
     try {
       const imageSize = await getImageSize(file);
       const image = await readFileAsImageData(file);
-      const result = await analyzeImage(image, imageSize);
+      const result = await analyzeImage(file, imageSize);
       setImageSrc(image);
       setNutrition(result);
       setSelectedMealType(null);
@@ -487,7 +323,7 @@ export function FoodDashboard() {
       const blob = await fetch(image).then((response) => response.blob());
       const pseudoFile = new File([blob], "capture.jpg", { type: "image/jpeg" });
       const imageSize = await getImageSize(pseudoFile);
-      const result = await analyzeImage(image, imageSize);
+      const result = await analyzeImage(pseudoFile, imageSize);
       setImageSrc(image);
       setNutrition(result);
       setSelectedMealType(null);
@@ -626,12 +462,8 @@ export function FoodDashboard() {
               {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {analyzing ? (
                 "Running food detection..."
-              ) : datasetError ? (
-                `Model status: Error — ${datasetError}`
-              ) : modelReady ? (
-                "Model status: Ready"
               ) : (
-                "Model status: Loading..."
+                "Food recognition service: Flask API"
               )}
             </div>
           </CardContent>
